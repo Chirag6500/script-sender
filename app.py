@@ -54,7 +54,7 @@ def run_git_commands(filename):
     try:
         subprocess.run(["git", "add", filename], check=True, cwd=REPO_DIR)
         subprocess.run(["git", "commit", "-m", f"Add {filename} via UI"], check=True, cwd=REPO_DIR)
-        subprocess.run(["git", "push", "-u", "origin", "master"], check=True, cwd=REPO_DIR)
+        subprocess.run(["git", "push", "-u", "origin", "main"], check=True, cwd=REPO_DIR)
         return True, "✅ Script pushed to GitHub!"
     except subprocess.CalledProcessError as e:
         return False, f"❌ Git error: {e}"
