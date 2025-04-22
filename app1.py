@@ -5,7 +5,7 @@ import requests
 
 app = Flask(__name__)
 
-# Set up the directory for local repo
+# Set up the directory for the local repo
 REPO_DIR = os.path.join(os.getcwd(), "repo")
 if not os.path.exists(REPO_DIR):
     os.makedirs(REPO_DIR)
@@ -40,6 +40,7 @@ TEMPLATE = '''
             <li><a href="{{ url_for('index', view=file) }}">{{ file }}</a></li>
         {% endfor %}
     </ul>
+
     {% if file_content %}
     <hr>
     <h3>Viewing: {{ view_file }}</h3>
@@ -52,9 +53,18 @@ TEMPLATE = '''
 # Run git commands to add, commit, and push the file
 def run_git_commands(filename):
     try:
+        # Pull the latest changes from the remote repository before making changes
+        subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=True, cwd=REPO_DIR)
+
+        # Stage the new file
         subprocess.run(["git", "add", filename], check=True, cwd=REPO_DIR)
+
+        # Commit the changes
         subprocess.run(["git", "commit", "-m", f"Add {filename} via UI"], check=True, cwd=REPO_DIR)
-        subprocess.run(["git", "push", "-u", "origin", "main"], check=True, cwd=REPO_DIR)
+
+        # Push the changes to the remote repository
+        subprocess.run(["git", "push", "origin", "main"], check=True, cwd=REPO_DIR)
+
         return True, "✅ Script pushed to GitHub!"
     except subprocess.CalledProcessError as e:
         return False, f"❌ Git error: {e}"
@@ -74,6 +84,13 @@ def fetch_file_content_from_github(file_name):
         return response.text
     return "❌ Could not fetch file content"
 
+# Check the git status to see if there are uncommitted changes
+def check_git_status():
+    result = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=REPO_DIR)
+    if result.stdout:
+        return False, "There are pending changes. Please commit and push them first."
+    return True, "Repository is clean."
+
 # Home route for displaying form and repo files
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -81,24 +98,31 @@ def index():
     file_content = ""
     message = ""
 
+    # Check if the repository has any pending changes
+    status_ok, status_message = check_git_status()
+
     if request.method == 'POST':
         filename = request.form['filename']
         content = request.form['content']
         filepath = os.path.join(REPO_DIR, filename)
 
-        # Save file locally
+        # Save the script file locally
         with open(filepath, 'w') as f:
             f.write(content)
 
+        # Run the git commands to add, commit, and push the file
         success, message = run_git_commands(filename)
         return redirect(url_for('index', message=message))
 
+    # Fetch the list of files from the GitHub repository
     files = fetch_files_from_github()
+
     if view_file and view_file in files:
+        # Fetch the content of the selected file from GitHub
         file_content = fetch_file_content_from_github(view_file)
 
     message = request.args.get('message', '')
-    return render_template_string(TEMPLATE, files=files, file_content=file_content, view_file=view_file, message=message)
+    return render_template_string(TEMPLATE, files=files, file_content=file_content, view_file=view_file, message=message, status_message=status_message)
 
 # Prevent caching of responses
 @app.after_request
@@ -110,3 +134,4 @@ def add_cache_control(response):
 
 if __name__ == '__main__':
     app.run(debug=True)
+
